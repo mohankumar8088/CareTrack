@@ -42,18 +42,29 @@ dose_logs = database.dose_logs
 appointments_collection = database.appointments
 uploaded_files = database.uploaded_files
 
-# Indexes prevent duplicate accounts and speed up the user's own timeline queries.
-users.create_index([("email", ASCENDING)], unique=True)
-users.create_index([("username", ASCENDING)], unique=True)
-profiles.create_index([("user_id", ASCENDING)], unique=True)
-health_records.create_index([("user_id", ASCENDING), ("record_date", DESCENDING)])
-medicine_collection.create_index([("user_id", ASCENDING)])
-dose_logs.create_index([("medicine_id", ASCENDING), ("scheduled_date", ASCENDING),
-                        ("scheduled_time", ASCENDING)], unique=True)
-dose_logs.create_index([("user_id", ASCENDING), ("scheduled_date", ASCENDING)])
-appointments_collection.create_index([("user_id", ASCENDING), ("appointment_at", ASCENDING)])
-uploaded_files.create_index([("filename", ASCENDING)], unique=True)
-uploaded_files.create_index([("user_id", ASCENDING)])
+_database_initialized = False
+
+
+def initialize_database():
+    """Check Atlas and create indexes on first database-backed request, not import."""
+    global _database_initialized
+    if _database_initialized:
+        return
+    mongo_client.admin.command("ping")
+    # Unique indexes preserve account and dose-log uniqueness. Other indexes speed up
+    # user-scoped pages. Running this repeatedly is safe; PyMongo skips existing ones.
+    users.create_index([("email", ASCENDING)], unique=True)
+    users.create_index([("username", ASCENDING)], unique=True)
+    profiles.create_index([("user_id", ASCENDING)], unique=True)
+    health_records.create_index([("user_id", ASCENDING), ("record_date", DESCENDING)])
+    medicine_collection.create_index([("user_id", ASCENDING)])
+    dose_logs.create_index([("medicine_id", ASCENDING), ("scheduled_date", ASCENDING),
+                            ("scheduled_time", ASCENDING)], unique=True)
+    dose_logs.create_index([("user_id", ASCENDING), ("scheduled_date", ASCENDING)])
+    appointments_collection.create_index([("user_id", ASCENDING), ("appointment_at", ASCENDING)])
+    uploaded_files.create_index([("filename", ASCENDING)], unique=True)
+    uploaded_files.create_index([("user_id", ASCENDING)])
+    _database_initialized = True
 
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
@@ -112,6 +123,22 @@ def csrf_guard():
         expected, supplied = session.get("csrf_token"), request.form.get("csrf_token")
         if not expected or not supplied or not secrets.compare_digest(expected, supplied):
             abort(400, "Form expired or invalid. Reload the page and try again.")
+
+
+@app.before_request
+def database_guard():
+    """Keep static/login pages available and return a useful status if Atlas is down."""
+    if request.path in {"/style.css", "/favicon.ico"}:
+        return None
+    if request.method == "GET" and request.endpoint in {"login", "register"}:
+        return None
+    try:
+        initialize_database()
+    except PyMongoError as exc:
+        # Avoid logging the connection URI or database credentials.
+        app.logger.error("MongoDB initialization failed (%s)", type(exc).__name__)
+        return ("MongoDB is not reachable. Check MONGODB_URI, the Atlas cluster status, "
+                "and Atlas Network Access/IP access list.", 503)
 
 
 @app.context_processor
@@ -436,6 +463,12 @@ def view_upload(filename):
 def local_stylesheet():
     """Serve the same public stylesheet locally; Vercel serves public/style.css itself."""
     return send_from_directory(ROOT / "public", "style.css", mimetype="text/css")
+
+
+@app.route("/favicon.ico")
+def favicon():
+    # A missing optional icon should not trigger a database operation.
+    return "", 204
 
 
 @app.route("/backup.zip")
