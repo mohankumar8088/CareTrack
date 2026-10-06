@@ -1,0 +1,14 @@
+{% extends 'base.html' %}{% block title %}{{ 'Create account' if mode == 'register' else 'Sign in' }}{% endblock %}
+{% block content %}<div class="auth-wrap"><section class="auth-card card border-0 shadow-sm"><div class="card-body p-4 p-md-5">
+  <div class="eyebrow">PERSONAL HEALTH RECORD</div><h1 class="h2 mt-2">{{ 'Create your account' if mode == 'register' else 'Welcome back' }}</h1>
+  <p class="text-secondary mb-4">{{ 'Keep your records, medicines, and appointments together.' if mode == 'register' else 'Sign in to see your health dashboard.' }}</p>
+  <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% if mode == 'register' %}<label class="form-label" for="email">Gmail address</label><input id="email" class="form-control mb-3" type="email" name="email" placeholder="you@gmail.com" required autocomplete="email">
+    <label class="form-label" for="username">Username</label><input id="username" class="form-control mb-3" name="username" minlength="3" maxlength="40" required autocomplete="username">
+    {% else %}<label class="form-label" for="identity">Gmail or username</label><input id="identity" class="form-control mb-3" name="identity" required autocomplete="username">{% endif %}
+    <label class="form-label" for="password">Password</label><input id="password" class="form-control mb-3" type="password" name="password" minlength="8" required autocomplete="{{ 'new-password' if mode == 'register' else 'current-password' }}">
+    {% if mode == 'register' %}<label class="form-label" for="confirm_password">Confirm password</label><input id="confirm_password" class="form-control mb-4" type="password" name="confirm_password" minlength="8" required autocomplete="new-password">{% endif %}
+    <button class="btn btn-primary w-100 py-2">{{ 'Create account' if mode == 'register' else 'Sign in' }}</button>
+  </form><div class="mt-4 text-center small">{% if mode == 'register' %}Already registered? <a href="{{ url_for('login') }}">Sign in</a>{% else %}New here? <a href="{{ url_for('register') }}">Create an account</a>{% endif %}</div>
+  {% if mode == 'register' %}<p class="small text-secondary mt-4 mb-0">Use a Gmail address. Choose a password you do not use on another account.</p>{% endif %}
+</div></section></div>{% endblock %}
